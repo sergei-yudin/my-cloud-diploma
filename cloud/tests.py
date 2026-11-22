@@ -47,6 +47,26 @@ class CloudApiTests(APITestCase):
         response = self.client.get(f"/api/files/?user_id={self.other.pk}")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_image_preview_and_non_image_rejection(self):
+        image = StoredFile.objects.create(
+            owner=self.user,
+            file=SimpleUploadedFile("photo.png", b"fake-png", content_type="image/png"),
+            original_name="photo.png",
+            size=8,
+        )
+        document = StoredFile.objects.create(
+            owner=self.user,
+            file=SimpleUploadedFile("notes.txt", b"notes", content_type="text/plain"),
+            original_name="notes.txt",
+            size=5,
+        )
+        self.login()
+        response = self.client.get(f"/api/files/{image.pk}/preview/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "image/png")
+        response = self.client.get(f"/api/files/{document.pk}/preview/")
+        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+
     def test_admin_can_manage_users_and_their_files(self):
         self.login("admin", "Admin1!")
         response = self.client.get("/api/users/")

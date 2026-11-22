@@ -13,6 +13,7 @@ urlpatterns = [
     path("files/", views.FilesView.as_view()),
     path("files/<int:pk>/", views.FileDetailView.as_view()),
     path("files/<int:pk>/download/", views.download),
+    path("files/<int:pk>/preview/", views.preview),
     path("files/<int:pk>/share/", views.share),
     path("public/<uuid:token>/", views.public_download),
 ]

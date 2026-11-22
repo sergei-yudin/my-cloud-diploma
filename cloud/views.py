@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,10 @@ from .permissions import IsAdministrator
 from .serializers import RegisterSerializer, StoredFileSerializer, UserSerializer
 
 logger = logging.getLogger(__name__)
+SAFE_IMAGE_PREVIEW_TYPES = {
+    "image/avif", "image/bmp", "image/gif", "image/heic", "image/heif",
+    "image/jpeg", "image/png", "image/webp",
+}
 
 
 def error(message, code=status.HTTP_400_BAD_REQUEST):
@@ -180,6 +185,17 @@ def download(request, pk):
     item.save(update_fields=["last_downloaded_at"])
     logger.info("User=%s downloaded file=%s", request.user.pk, item.pk)
     return FileResponse(item.file.open("rb"), as_attachment=True, filename=item.original_name)
+
+
+@api_view(["GET"])
+def preview(request, pk):
+    item = get_accessible_file(request, pk)
+    if item is None:
+        return error("Нет доступа к файлу.", status.HTTP_403_FORBIDDEN)
+    content_type, _ = mimetypes.guess_type(item.original_name)
+    if content_type not in SAFE_IMAGE_PREVIEW_TYPES:
+        return error("Предпросмотр доступен только для изображений.", status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+    return FileResponse(item.file.open("rb"), content_type=content_type)
 
 
 @api_view(["POST", "DELETE"])
