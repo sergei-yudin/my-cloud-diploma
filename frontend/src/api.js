@@ -1,11 +1,17 @@
-let csrfToken = null
+function csrfFromCookie() {
+  const cookie = document.cookie
+    .split('; ')
+    .find((item) => item.startsWith('csrftoken='))
+  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : null
+}
 
 async function ensureCsrf() {
-  if (!csrfToken) {
-    const response = await fetch('/api/csrf/', { credentials: 'include' })
-    csrfToken = (await response.json()).csrfToken
-  }
-  return csrfToken
+  const currentToken = csrfFromCookie()
+  if (currentToken) return currentToken
+  const response = await fetch('/api/csrf/', { credentials: 'include' })
+  if (!response.ok) throw new Error('Не удалось получить защитный CSRF-токен.')
+  const data = await response.json()
+  return csrfFromCookie() || data.csrfToken
 }
 
 export async function api(path, options = {}) {
