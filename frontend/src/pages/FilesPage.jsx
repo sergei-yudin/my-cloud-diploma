@@ -8,6 +8,7 @@ export default function FilesPage({ ownerId = null, embedded = false }) {
   const currentUser = useSelector((state) => state.auth.user)
   const [files, setFiles] = useState([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
   const [selectedFile, setSelectedFile] = useState(null); const [comment, setComment] = useState('')
+  const [openMenu, setOpenMenu] = useState(null)
   const suffix = ownerId ? `?user_id=${ownerId}` : ''
   const load = useCallback(async () => { try { setFiles(await api(`/files/${suffix}`)); setError('') } catch (e) { setError(e.message) } }, [suffix])
   useEffect(() => { load() }, [load])
@@ -17,12 +18,14 @@ export default function FilesPage({ ownerId = null, embedded = false }) {
     try { setBusy(true); setError(''); await api('/files/', { method: 'POST', body: data }); event.target.reset(); setSelectedFile(null); setComment(''); await load() } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   const edit = async (item, field) => {
+    setOpenMenu(null)
     const value = window.prompt(field === 'original_name' ? 'Новое имя файла' : 'Комментарий', item[field] || '')
     if (value === null) return
     try { await api(`/files/${item.id}/`, { method: 'PATCH', body: JSON.stringify({ [field]: value }) }); await load() } catch (e) { setError(e.message) }
   }
-  const remove = async (item) => { if (!window.confirm(`Удалить «${item.original_name}»?`)) return; try { await api(`/files/${item.id}/`, { method: 'DELETE' }); await load() } catch (e) { setError(e.message) } }
+  const remove = async (item) => { setOpenMenu(null); if (!window.confirm(`Удалить «${item.original_name}»?`)) return; try { await api(`/files/${item.id}/`, { method: 'DELETE' }); await load() } catch (e) { setError(e.message) } }
   const share = async (item) => {
+    setOpenMenu(null)
     try { const updated = await api(`/files/${item.id}/share/`, { method: item.share_url ? 'DELETE' : 'POST' }); await load(); if (updated.share_url) { await navigator.clipboard.writeText(updated.share_url); window.alert('Ссылка скопирована') } } catch (e) { setError(e.message) }
   }
   return <section className={embedded ? 'embedded-files' : 'page'}>
@@ -38,7 +41,25 @@ export default function FilesPage({ ownerId = null, embedded = false }) {
       {selectedFile && <div className="upload-hint">Файл готов к загрузке. Нажмите «Загрузить файл».</div>}
     </form>
     {error && <div className="alert error">{error}</div>}
-    {!files.length ? <div className="empty"><span>☁</span><h2>Здесь пока пусто</h2><p>Загрузите первый файл — он появится в этом списке.</p></div> : <div className="table-wrap"><table><thead><tr><th>Файл</th><th>Комментарий</th><th>Размер</th><th>Загружен</th><th>Скачан</th><th>Действия</th></tr></thead><tbody>{files.map((item) => <tr key={item.id}><td><div className="file-cell">{imagePattern.test(item.original_name) ? <a className="file-preview" href={`/api/files/${item.id}/preview/`} target="_blank" rel="noreferrer" aria-label={`Открыть ${item.original_name}`}><img src={`/api/files/${item.id}/preview/`} alt="" loading="lazy" /></a> : <span className="file-icon">▤</span>}<strong>{item.original_name}</strong></div></td><td>{item.comment || '—'}</td><td>{humanSize(item.size)}</td><td>{new Date(item.uploaded_at).toLocaleString('ru')}</td><td>{item.last_downloaded_at ? new Date(item.last_downloaded_at).toLocaleString('ru') : '—'}</td><td><div className="row-actions"><a data-tooltip="Скачать" aria-label="Скачать файл" href={`/api/files/${item.id}/download/`}>↓</a><button data-tooltip="Переименовать" aria-label="Переименовать файл" onClick={() => edit(item, 'original_name')}>✎</button><button data-tooltip="Изменить комментарий" aria-label="Изменить комментарий" onClick={() => edit(item, 'comment')}>☰</button><button data-tooltip={item.share_url ? 'Отключить публичную ссылку' : 'Создать и скопировать ссылку'} aria-label={item.share_url ? 'Отключить публичную ссылку' : 'Создать публичную ссылку'} onClick={() => share(item)}>↗</button><button className="danger" data-tooltip="Удалить" aria-label="Удалить файл" onClick={() => remove(item)}>×</button></div></td></tr>)}</tbody></table></div>}
+    {!files.length ? <div className="empty"><span>☁</span><h2>Здесь пока пусто</h2><p>Загрузите первый файл — он появится в этом списке.</p></div> : <div className="file-gallery">{files.map((item) => {
+      const isImage = imagePattern.test(item.original_name)
+      return <article className={`file-card ${isImage ? 'image-card' : 'document-card'}`} key={item.id}>
+        <div className="card-media">
+          {isImage ? <a href={`/api/files/${item.id}/preview/`} target="_blank" rel="noreferrer" aria-label={`Открыть ${item.original_name}`}><img src={`/api/files/${item.id}/preview/`} alt={item.original_name} loading="lazy" /></a> : <div className="document-preview"><span>▤</span><small>{item.original_name.split('.').pop()?.toUpperCase()}</small></div>}
+          <div className="card-actions">
+            <a className="media-action" data-tooltip="Скачать" aria-label="Скачать файл" href={`/api/files/${item.id}/download/`}>↓</a>
+            <button className="media-action menu-trigger" data-tooltip="Другие действия" aria-label="Другие действия" aria-expanded={openMenu === item.id} onClick={() => setOpenMenu(openMenu === item.id ? null : item.id)}>⋮</button>
+          </div>
+          {openMenu === item.id && <div className="card-menu">
+            <button onClick={() => edit(item, 'original_name')}><span>✎</span> Переименовать</button>
+            <button onClick={() => edit(item, 'comment')}><span>☰</span> Изменить комментарий</button>
+            <button onClick={() => share(item)}><span>↗</span> {item.share_url ? 'Отключить ссылку' : 'Создать публичную ссылку'}</button>
+            <button className="danger" onClick={() => remove(item)}><span>×</span> Удалить</button>
+          </div>}
+        </div>
+        <div className="card-info"><strong title={item.original_name}>{item.original_name}</strong>{item.comment && <p>{item.comment}</p>}<div className="card-meta"><span>{humanSize(item.size)}</span><span>{new Date(item.uploaded_at).toLocaleDateString('ru')}</span></div></div>
+      </article>
+    })}</div>}
   </section>
 }
 
