@@ -7,15 +7,15 @@ const imagePattern = /\.(avif|bmp|gif|heic|heif|jpe?g|png|webp)$/i
 export default function FilesPage({ ownerId = null, embedded = false }) {
   const currentUser = useSelector((state) => state.auth.user)
   const [files, setFiles] = useState([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
-  const [selectedFile, setSelectedFile] = useState(null); const [comment, setComment] = useState('')
   const [openMenu, setOpenMenu] = useState(null)
   const suffix = ownerId ? `?user_id=${ownerId}` : ''
   const load = useCallback(async () => { try { setFiles(await api(`/files/${suffix}`)); setError('') } catch (e) { setError(e.message) } }, [suffix])
   useEffect(() => { load() }, [load])
   const upload = async (event) => {
-    event.preventDefault(); if (!selectedFile) return setError('Сначала выберите файл.')
-    const data = new FormData(); data.append('file', selectedFile); data.append('comment', comment); if (ownerId) data.append('user_id', ownerId)
-    try { setBusy(true); setError(''); await api('/files/', { method: 'POST', body: data }); event.target.reset(); setSelectedFile(null); setComment(''); await load() } catch (e) { setError(e.message) } finally { setBusy(false) }
+    const input = event.target; const selectedFile = input.files[0]
+    if (!selectedFile) return
+    const data = new FormData(); data.append('file', selectedFile); if (ownerId) data.append('user_id', ownerId)
+    try { setBusy(true); setError(''); await api('/files/', { method: 'POST', body: data }); await load() } catch (e) { setError(e.message) } finally { setBusy(false); input.value = '' }
   }
   const edit = async (item, field) => {
     setOpenMenu(null)
@@ -29,17 +29,8 @@ export default function FilesPage({ ownerId = null, embedded = false }) {
     try { const updated = await api(`/files/${item.id}/share/`, { method: item.share_url ? 'DELETE' : 'POST' }); await load(); if (updated.share_url) { await navigator.clipboard.writeText(updated.share_url); window.alert('Ссылка скопирована') } } catch (e) { setError(e.message) }
   }
   return <section className={embedded ? 'embedded-files' : 'page'}>
-    {!embedded && <div className="page-heading"><div><span className="eyebrow">Личное хранилище</span><h1>Мои файлы</h1><p className="page-subtitle">{currentUser.full_name}</p></div><span className="pill">{files.length} файлов · {humanSize(files.reduce((sum, item) => sum + item.size, 0))}</span></div>}
-    <form className="upload-card" onSubmit={upload}>
-      <label className={`file-drop ${selectedFile ? 'selected' : ''}`}>
-        <span className="file-drop-title">{selectedFile ? '✓ Файл выбран' : 'Выберите файл'}</span>
-        <span className="file-drop-name">{selectedFile ? `${selectedFile.name} · ${humanSize(selectedFile.size)}` : 'Фото, документ или архив'}</span>
-        <input type="file" onChange={(event) => { setSelectedFile(event.target.files[0] || null); setError('') }} />
-      </label>
-      <input placeholder="Комментарий к файлу (необязательно)" value={comment} onChange={(e) => setComment(e.target.value)} />
-      <button className="button" disabled={busy || !selectedFile}>{busy ? 'Загружаю…' : selectedFile ? 'Загрузить файл' : 'Сначала выберите файл'}</button>
-      {selectedFile && <div className="upload-hint">Файл готов к загрузке. Нажмите «Загрузить файл».</div>}
-    </form>
+    {!embedded && <div className="page-heading"><div><span className="eyebrow">Личное хранилище</span><h1>Мои файлы</h1><p className="page-subtitle">{currentUser.full_name}</p></div><div className="heading-actions"><span className="pill">{files.length} файлов · {humanSize(files.reduce((sum, item) => sum + item.size, 0))}</span><label className={`button add-file-button ${busy ? 'disabled' : ''}`}>{busy ? 'Загрузка…' : '+ Добавить'}<input type="file" disabled={busy} onChange={upload} /></label></div></div>}
+    {embedded && <label className={`button add-file-button embedded-add ${busy ? 'disabled' : ''}`}>{busy ? 'Загрузка…' : '+ Добавить файл'}<input type="file" disabled={busy} onChange={upload} /></label>}
     {error && <div className="alert error">{error}</div>}
     {!files.length ? <div className="empty"><span>☁</span><h2>Здесь пока пусто</h2><p>Загрузите первый файл — он появится в этом списке.</p></div> : <div className="file-gallery">{files.map((item) => {
       const isImage = imagePattern.test(item.original_name)
